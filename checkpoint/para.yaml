@@ -1,0 +1,9 @@
+b1: 0.5
+b2: 0.999
+batch_size: 1
+center_kspace_size: 2
+data_path: data
+epoch: 1
+lr: 5.0e-05
+n_epochs: 30
+rank: 8
