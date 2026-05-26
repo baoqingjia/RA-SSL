@@ -38,8 +38,7 @@ Place the required `.mat` files under `data/`.
 
 The current preprocessing code expects one file for each role:
 
-- Noisy k-space file: filename contains `no_ksp` and does not contain `all`
-- Averaged/all noisy k-space file: filename contains both `no_ksp` and `all`
+- Summed/all noisy k-space file: filename contains both `no_ksp` and `all`
 - Reference k-space file: filename contains `gt_ksp`
 
 Example:
