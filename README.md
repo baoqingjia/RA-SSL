@@ -157,4 +157,10 @@ test_logs_<logname>/
 
 ## References
 
-<!-- Add related papers and citation information here. -->
+1. Lehtinen J, Munkberg J, Hasselgren J, et al.  
+   **Noise2Noise: Learning image restoration without clean data**[J].  
+   *arXiv preprint arXiv:1803.04189*, 2018.
+
+2. Li X, Zhang G, Wu J, et al.  
+   **Reinforcing neuron extraction and spike inference in calcium imaging using deep self-supervised denoising**[J].  
+   *Nature Methods*, 2021, 18(11): 1395–1400.
