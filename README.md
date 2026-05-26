@@ -47,7 +47,6 @@ Example:
 ```text
 data/
 ├── dmi_si_gt_ksp_hum32.mat
-├── dmi_si_no_ksp_hum32_no008_ra32_addno02.mat
 └── dmi_si_no_ksp_hum32_no08_ra32_all.mat
 ```
 
