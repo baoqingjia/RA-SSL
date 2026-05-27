@@ -1,6 +1,5 @@
 import numpy as np
 import os
-import random
 import h5py
 
 
@@ -86,7 +85,7 @@ def _read_complex_ksp(mat_path, dataset_name):
     return ksp['real'] + 1j * ksp['imag']
 
 
-def train_preprocess_lessMemoryMulStacks(args):
+def train_data(args):
 
     coordinate_list={}
 
@@ -125,17 +124,8 @@ def train_preprocess_lessMemoryMulStacks(args):
 
     return  coordinate_list, no_ksp, no_ksp_all, gt_ksp
 
-def shuffle_datasets_lessMemory(name_list):
-    index_list = list(range(0, len(name_list)))
-    random.shuffle(index_list)
-    random_index_list = index_list
-    new_name_list = list(range(0, len(name_list)))
-    for i in range(0,len(random_index_list)):
-        new_name_list[i] = name_list[random_index_list[i]]
-    return new_name_list
 
-
-def test_preprocess_lessMemoryNoTail (args):
+def test_data(args):
 
     test_no_ksp_path = _get_test_no_ksp_path(args)
     with h5py.File(test_no_ksp_path, 'r') as mat_file:

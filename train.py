@@ -5,7 +5,7 @@ import time
 import sys
 from network import SSAN_Net
 import numpy as np
-from data_process import get_train_no_ksp_logname, train_preprocess_lessMemoryMulStacks
+from data_process import get_train_no_ksp_logname, train_data
 from utils import FFTKSpace2XSpace_numpy, save_yaml, plot_cpu, DMIDataAugmentorN2N, FFTXSpace2KSpace_numpy
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
@@ -97,7 +97,7 @@ if opt.epoch > 1:
         print(f"---------> Warning: Checkpoint {resume_checkpoint_path} not found!")
         print("---------> Starting from scratch or please check the --epoch parameter.")
 
-coordinate_list, no_ksp, no_ksp_ori, gt_ksp = train_preprocess_lessMemoryMulStacks(opt) # (64, 15, 32, 32, 120)
+coordinate_list, no_ksp, no_ksp_ori, gt_ksp = train_data(opt) # (64, 15, 32, 32, 120)
 has_gt = gt_ksp is not None
 
 

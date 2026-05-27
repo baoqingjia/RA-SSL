@@ -9,7 +9,7 @@ import scipy.io as scio
 from network import SSAN_Net
 import numpy as np
 from utils import FFTKSpace2XSpace_numpy, read_yaml, plot_cpu
-from data_process import test_preprocess_lessMemoryNoTail
+from data_process import test_data
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 
@@ -60,7 +60,7 @@ for checkpoint_name in checkpoint_names:
 
 model_list = checkpoint_names
 
-no_ksp_test, no_ksp_all, gt_ksp, test_no_ksp_path = test_preprocess_lessMemoryNoTail(opt)
+no_ksp_test, no_ksp_all, gt_ksp, test_no_ksp_path = test_data(opt)
 if no_ksp_test.ndim not in (4, 5):
     raise ValueError(f"Expected 4D or 5D test k-space, got shape {no_ksp_test.shape}.")
 

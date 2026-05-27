@@ -186,3 +186,9 @@ log/test/<dataset_name>/
 - Checkpoints are PyTorch state dictionaries.
 - Training pairs are generated from the first dimension of the preprocessed `no_n2n_ksp`, so the number of grouped noisy measurements is not hard-coded.
 - `para.yaml` is saved with training hyperparameters and loaded by `test.py` before reconstruction. The dataset path used for grouping checkpoints/results still comes from `--data_path`.
+
+## References
+
+1. Lehtinen J, Munkberg J, Hasselgren J, et al. Noise2Noise: Learning image restoration without clean data[J]. arXiv preprint arXiv:1803.04189, 2018.
+
+2. Li X, Zhang G, Wu J, et al. Reinforcing neuron extraction and spike inference in calcium imaging using deep self-supervised denoising[J]. Nature Methods, 2021, 18(11): 1395-1400.
