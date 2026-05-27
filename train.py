@@ -3,7 +3,7 @@ import torch
 import argparse
 import time
 import sys
-from network import Network_3D_Unet
+from network import SSAN_Net
 import numpy as np
 from data_process import get_train_no_ksp_logname, train_preprocess_lessMemoryMulStacks
 from utils import FFTKSpace2XSpace_numpy, save_yaml, plot_cpu, DMIDataAugmentorN2N, FFTXSpace2KSpace_numpy
@@ -13,27 +13,57 @@ import shutil
 import scipy.io as scio
 
 
+class TeeOutput:
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for stream in self.streams:
+            stream.write(data)
+            stream.flush()
+
+    def flush(self):
+        for stream in self.streams:
+            stream.flush()
+
+    def isatty(self):
+        return self.streams[0].isatty()
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--epoch", type=int, default=1, help="epoch to start training from")
-parser.add_argument("--n_epochs", type=int, default=30, help="number of training epochs")
+parser.add_argument("--n_epochs", type=int, default=30, help="final epoch to train through")
 parser.add_argument('--cuda', action='store_true', help='use GPU computation')
 parser.add_argument('--GPU', type=int, default=5, help="the index of GPU you will use for computation")
 parser.add_argument('--batch_size', type=int, default=1, help="batch size")
 parser.add_argument('--lr', type=float, default=0.00005, help='initial learning rate')
 parser.add_argument("--b1", type=float, default=0.5, help="Adam beta1")
 parser.add_argument("--b2", type=float, default=0.999, help="Adam beta2")
-parser.add_argument('--data_path', type=str, default='data', help="dataset root path")
+parser.add_argument('--data_path', type=str, default=os.path.join('dataset', 'dmi_si_hum32_no008_ra32'), help="dataset path")
 parser.add_argument('--checkpoint_path', type=str, default='checkpoint', help="checkpoint root path")
 parser.add_argument('--center_kspace_size', type=int, default=2, help='central k-space width used for SVD')
 parser.add_argument('--rank', type=int, default=8, help='low-rank spectral basis rank')
 opt = parser.parse_args()
+if opt.epoch > opt.n_epochs:
+    raise ValueError(f"--epoch ({opt.epoch}) must be less than or equal to --n_epochs ({opt.n_epochs}).")
 
+data_group_name = os.path.basename(os.path.normpath(opt.data_path))
+logname = get_train_no_ksp_logname(opt.data_path)
+train_result_path = os.path.join('result', 'train', data_group_name)
+os.makedirs(train_result_path, exist_ok=True)
+
+console_log_path = os.path.join(train_result_path, logname + '_console.log')
+console_log_file = open(console_log_path, 'w', buffering=1)
+original_stdout = sys.stdout
+original_stderr = sys.stderr
+sys.stdout = TeeOutput(original_stdout, console_log_file)
+sys.stderr = TeeOutput(original_stderr, console_log_file)
+
+print(f"Console log file: {console_log_path}")
 print('Training parameters:')
 print(opt)
 
-logname = get_train_no_ksp_logname(opt.data_path)
-
-checkpoint_path = opt.checkpoint_path
+checkpoint_path = os.path.join(opt.checkpoint_path, data_group_name)
 os.makedirs(checkpoint_path, exist_ok=True)
 
 yaml_name = os.path.join(checkpoint_path, 'para.yaml')
@@ -46,7 +76,7 @@ device = torch.device(f"cuda:{opt.GPU}" if USE_CUDA else "cpu")
 L2_pixelwise = torch.nn.MSELoss()
 
 
-denoise_generator = Network_3D_Unet(in_channels = 2,
+denoise_generator = SSAN_Net(in_channels = 2,
                                 out_channels = 2,
                                 final_sigmoid = True)
 
@@ -68,27 +98,30 @@ if opt.epoch > 1:
         print("---------> Starting from scratch or please check the --epoch parameter.")
 
 coordinate_list, no_ksp, no_ksp_ori, gt_ksp = train_preprocess_lessMemoryMulStacks(opt) # (64, 15, 32, 32, 120)
+has_gt = gt_ksp is not None
 
 
 no_ksp_all_fft = np.fft.fftshift(np.fft.fft(no_ksp_ori, axis=2), axes=2)
 no_ksp_all_fft = FFTKSpace2XSpace_numpy(no_ksp_all_fft, 0)
 no_all_ori = FFTKSpace2XSpace_numpy(no_ksp_all_fft, 1)
 
-gt_ksp_fft = np.fft.fftshift(np.fft.fft(gt_ksp, axis=2), axes=2)
-gt_ksp_fft = FFTKSpace2XSpace_numpy(gt_ksp_fft, 0)
-gt = FFTKSpace2XSpace_numpy(gt_ksp_fft, 1)
+if has_gt:
+    gt_ksp_fft = np.fft.fftshift(np.fft.fft(gt_ksp, axis=2), axes=2)
+    gt_ksp_fft = FFTKSpace2XSpace_numpy(gt_ksp_fft, 0)
+    gt = FFTKSpace2XSpace_numpy(gt_ksp_fft, 1)
+else:
+    gt = None
+    print("No gt_ksp found. RMSE and GT TensorBoard visualization will be skipped.")
 
 L2_pixelwise.to(device)
 optimizer_G = torch.optim.Adam(denoise_generator.parameters(),
                                 lr=opt.lr, betas=(opt.b1, opt.b2))
 
 train_time_sum = 0
-epoch_time = 0
 time_start=time.time()
+num_trained_epochs = opt.n_epochs - opt.epoch + 1
 
-log_dir = 'logs_' + logname
-train_result_path = os.path.join('result', 'train')
-os.makedirs(train_result_path, exist_ok=True)
+log_dir = os.path.join('log', 'train', data_group_name)
 
 if os.path.exists(log_dir) and os.listdir(log_dir):
     print(f"Directory {log_dir} is not empty. It will be cleared.")
@@ -105,8 +138,9 @@ if os.path.exists(file_path):
 
 n = 1
 
-for epoch in range(opt.epoch, opt.n_epochs):
+for epoch in range(opt.epoch, opt.n_epochs + 1):
 
+    epoch_time = 0
     denoise_img = np.zeros(no_all_ori.shape, dtype=complex) # (w, h, s, t)
     w, h, s, t = no_all_ori.shape
     no_p1_lr_pre_re_im_iz12 = np.zeros((2, 2, w, h, s, t))
@@ -206,7 +240,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
         # Reshape tensors.
         space_coefficient_p1_resha = space_coefficient_p1_comp.reshape(w * h, s, rank, -1) # (256, 120, 8, 2)
 
-        # Build the network input tensor.
+        # Build the SSAN_Net input tensor.
         space_coefficient_p1_input = torch.from_numpy(np.expand_dims(space_coefficient_p1_resha, 0)) # 1, 256, 120, 8, 2
         space_coefficient_p1_input = space_coefficient_p1_input.permute([0, 4, 3, 1, 2]) # (1, 2, 8, 256, 120)
         space_coefficient_p1_input = space_coefficient_p1_input.to(device)
@@ -305,9 +339,10 @@ for epoch in range(opt.epoch, opt.n_epochs):
             writer.add_figure(f'2_de_iz12', fig_de_iz12, n)
             plt.close(fig_de_iz12)  
 
-            fig_gt = plot_cpu(gt)
-            writer.add_figure(f'3_gt', fig_gt, n)
-            plt.close(fig_gt)  
+            if has_gt:
+                fig_gt = plot_cpu(gt)
+                writer.add_figure(f'3_gt', fig_gt, n)
+                plt.close(fig_gt)  
 
             fig_no_all = plot_cpu(no_all)
             writer.add_figure(f'4_no_all', fig_no_all, n)
@@ -336,34 +371,39 @@ for epoch in range(opt.epoch, opt.n_epochs):
             de = os.path.join(train_result_path, logname + '_epoch_' + str(epoch) + '.mat')
             scio.savemat(de, {'de': denoise_img})
 
-            gt_abs_norm = abs(gt) / abs(gt).max()
-            no_p1_lr_pre_re_im_iz12_mean_comp_abs_norm = abs(no_p1_lr_pre_re_im_iz12_mean_comp) / abs(no_p1_lr_pre_re_im_iz12_mean_comp).max()
-            iz1_abs_norm = abs(no_p1_lr_pre_re_im_iz12[0,...]) / abs(no_p1_lr_pre_re_im_iz12[0,...]).max()
-            iz2_abs_norm = abs(no_p1_lr_pre_re_im_iz12[1,...]) / abs(no_p1_lr_pre_re_im_iz12[1,...]).max()
+            if has_gt:
+                gt_abs_norm = abs(gt) / abs(gt).max()
+                no_p1_lr_pre_re_im_iz12_mean_comp_abs_norm = abs(no_p1_lr_pre_re_im_iz12_mean_comp) / abs(no_p1_lr_pre_re_im_iz12_mean_comp).max()
+                iz1_abs_norm = abs(no_p1_lr_pre_re_im_iz12[0,...]) / abs(no_p1_lr_pre_re_im_iz12[0,...]).max()
+                iz2_abs_norm = abs(no_p1_lr_pre_re_im_iz12[1,...]) / abs(no_p1_lr_pre_re_im_iz12[1,...]).max()
 
-            rmse_iz12 = np.sqrt(np.mean((no_p1_lr_pre_re_im_iz12_mean_comp_abs_norm[:,:,49:68,:] - gt_abs_norm[:,:,49:68,:])**2))
-            rmse_iz1 = np.sqrt(np.mean((iz1_abs_norm[0,:,:,49:68,:] - gt_abs_norm[:,:,49:68,:])**2))
-            rmse_iz2 = np.sqrt(np.mean((iz2_abs_norm[1,:,:,49:68,:] - gt_abs_norm[:,:,49:68,:])**2))
+                rmse_iz12 = np.sqrt(np.mean((no_p1_lr_pre_re_im_iz12_mean_comp_abs_norm[:,:,49:68,:] - gt_abs_norm[:,:,49:68,:])**2))
+                rmse_iz1 = np.sqrt(np.mean((iz1_abs_norm[0,:,:,49:68,:] - gt_abs_norm[:,:,49:68,:])**2))
+                rmse_iz2 = np.sqrt(np.mean((iz2_abs_norm[1,:,:,49:68,:] - gt_abs_norm[:,:,49:68,:])**2))
 
     train_time_sum += epoch_time
 
     # Append epoch metrics to the training log.
     with open(os.path.join(checkpoint_path, 'output.txt'), 'a') as f:
-        print(f"epoch: {epoch} time: {epoch_time:.6f}  \
-            \n rmse_iz12: {rmse_iz12:.6f} rmse_iz1: {rmse_iz1:.6f} rmse_iz2: {rmse_iz2:.6f}")
-        
-        f.write(f"epoch: {epoch} time: {epoch_time:.6f} \
-                \n rmse_iz12: {rmse_iz12:.6f} rmse_iz1: {rmse_iz1:.6f} rmse_iz2: {rmse_iz2:.6f}\n")
+        log_text = f"epoch: {epoch} time: {epoch_time:.6f}"
+        if has_gt:
+            log_text += f"\n rmse_iz12: {rmse_iz12:.6f} rmse_iz1: {rmse_iz1:.6f} rmse_iz2: {rmse_iz2:.6f}"
+
+        print(log_text)
+        f.write(log_text + '\n')
 
     if epoch % 1 == 0:
         torch.save(denoise_generator.state_dict(), os.path.join(checkpoint_path, 'epoch_' + str(epoch) + '.pth'))
-
-torch.save(denoise_generator.state_dict(), os.path.join(checkpoint_path, 'epoch_' + str(opt.n_epochs) + '.pth'))
 
 time_end = time.time()
 all_time = time_end - time_start
 
 writer.close()
 
-print("all_time_sum: {}s, all_time_aver: {}s".format(all_time , all_time / 20))
-print("train_time_sum: {}s, train_time_aver: {}s".format(train_time_sum , train_time_sum / 20))
+print("all_time_sum: {}s, all_time_aver: {}s".format(all_time , all_time / num_trained_epochs))
+print("train_time_sum: {}s, train_time_aver: {}s".format(train_time_sum , train_time_sum / num_trained_epochs))
+print(f"Console log saved to: {console_log_path}")
+
+sys.stdout = original_stdout
+sys.stderr = original_stderr
+console_log_file.close()

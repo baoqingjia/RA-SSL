@@ -1,59 +1,67 @@
 # RA-SSL
 
-This repository contains the training and inference code for an RA-SSL reconstruction pipeline built around a spectral-spatial attention network (`SSAN`). The code is organized for dynamic metabolic imaging k-space data stored in MATLAB/HDF5 `.mat` files.
+This repository contains training and inference code for an RA-SSL reconstruction pipeline built around the spectral-spatial attention network `SSAN`. The code works with dynamic metabolic imaging k-space data stored in MATLAB/HDF5 `.mat` files.
 
-## Overview
-
-The pipeline trains a self-supervised reconstruction network from paired noisy k-space measurements. Each sample is transformed into the image domain, projected onto low-rank spectral bases, processed by the SSAN model, and reconstructed back into complex-valued image sequences.
-
-Main features:
-
-- Self-supervised training from noisy k-space pairs.
-- Low-rank spectral representation with configurable rank.
-- Configurable central k-space region for SVD basis estimation.
-- Checkpoint saving by epoch.
-- Separate output folders for training and testing reconstructions.
-
-## Repository Structure
+## Project Layout
 
 ```text
 RA-SSL/
-├── SSAN.py              # Spectral-spatial attention network
-├── buildingblocks.py    # 3D U-Net encoder/decoder building blocks
-├── data_process.py      # Data discovery and preprocessing
-├── network.py           # Model wrapper
-├── train.py             # Training script
-├── test.py              # Inference script
-├── utils.py             # FFT, YAML, plotting, and augmentation utilities
-├── data/                # Input .mat files
-├── checkpoint/          # Model checkpoints and training parameters
-└── result/
-    ├── train/           # Training-time reconstruction outputs
-    └── test/            # Test-time reconstruction outputs
+├── SSAN.py
+├── buildingblocks.py
+├── data_process.py
+├── network.py
+├── train.py
+├── test.py
+├── utils.py
+├── dataset/
+│   └── <dataset_name>/
+├── checkpoint/
+│   └── <dataset_name>/
+├── result/
+│   ├── train/
+│   │   └── <dataset_name>/
+│   └── test/
+│       └── <dataset_name>/
+└── log/
+    ├── train/
+    │   └── <dataset_name>/
+    └── test/
+        └── <dataset_name>/
 ```
+
+The current dataset directory is:
+
+```text
+dataset/dmi_si_hum32_no008_ra32/
+```
+
+The dataset name, for example `dmi_si_hum32_no008_ra32`, is used automatically to group checkpoints, results, and TensorBoard logs.
 
 ## Data Preparation
 
-Place the required `.mat` files under `data/`.
-
-The current preprocessing code expects one file for each role:
-
-- Summed/all noisy k-space file: filename contains both `no_ksp` and `all`
-- Reference k-space file: filename contains `gt_ksp`
-
-Example:
+Place `.mat` files under one dataset subdirectory. The grouped noisy k-space file `dmi_si_no_ksp_hum32_no008_ra32_addno02.mat` is not uploaded because it is large; please contact the authors by email if you need access to this file:
 
 ```text
-data/
+dataset/dmi_si_hum32_no008_ra32/
 ├── dmi_si_gt_ksp_hum32.mat
-└── dmi_si_no_ksp_hum32_no08_ra32_all.mat
+├── dmi_si_no_ksp_hum32_no008_ra32_addno02.mat
+└── dmi_si_no_ksp_hum32_no08_all.mat
 ```
 
-The training log name is generated automatically from the noisy k-space filename without the `.mat` suffix.
+Training expects:
+
+- A grouped noisy k-space file whose name contains `no_ksp` and does not contain `all`.
+- An accumulated/all noisy k-space file whose name contains both `no_ksp` and `all`.
+- An optional reference file whose name contains `gt_ksp`.
+
+Testing supports two input modes:
+
+- 4D accumulated/all mode: a file with key `no_ksp`, shape `(w, h, s, t)` after preprocessing. This mode does not average groups.
+- 5D grouped mode: a file with key `no_n2n_ksp`, shape `(group, t, w, h, s)` after preprocessing. This mode reconstructs the first two groups and averages them.
+
+If `gt_ksp` exists, train/test compute RMSE and write GT images to TensorBoard. If it does not exist, RMSE and GT visualization are skipped.
 
 ## Environment
-
-The code is written in Python and uses PyTorch. A CUDA-capable GPU is recommended.
 
 Core dependencies:
 
@@ -69,7 +77,7 @@ einops
 einops-exts
 ```
 
-Install dependencies in your preferred environment, for example:
+Install dependencies in your Python environment, for example:
 
 ```bash
 pip install torch numpy scipy h5py matplotlib tensorboard pyyaml einops einops-exts
@@ -77,16 +85,19 @@ pip install torch numpy scipy h5py matplotlib tensorboard pyyaml einops einops-e
 
 ## Training
 
-Run:
+Run training with the dataset directory:
 
 ```bash
-python train.py --GPU 0
+python train.py \
+  --data_path dataset/dmi_si_hum32_no008_ra32 \
+  --GPU 0
 ```
 
 Common options:
 
 ```bash
 python train.py \
+  --data_path dataset/dmi_si_hum32_no008_ra32 \
   --GPU 0 \
   --n_epochs 30 \
   --lr 0.00005 \
@@ -96,70 +107,82 @@ python train.py \
 
 Important arguments:
 
+- `--data_path`: dataset directory containing the `.mat` files.
+- `--checkpoint_path`: checkpoint root directory. The script writes to `checkpoint/<dataset_name>/`.
+- `--epoch`: starting epoch. Use values greater than `1` to resume from `epoch_<epoch-1>.pth`; it must be less than or equal to `--n_epochs`.
+- `--n_epochs`: final epoch to train through, inclusive. For example, `--epoch 1 --n_epochs 30` trains epochs 1 through 30.
 - `--GPU`: GPU index used when CUDA is available.
-- `--epoch`: starting epoch. Use values greater than `1` to resume from the previous checkpoint.
-- `--n_epochs`: number of training epochs.
-- `--data_path`: input data directory. Default: `data`.
-- `--checkpoint_path`: checkpoint directory. Default: `checkpoint`.
-- `--center_kspace_size`: central k-space width used for SVD basis estimation. Default: `2`.
-- `--rank`: low-rank spectral basis rank. Default: `8`.
+- `--center_kspace_size`: central k-space width used for SVD basis estimation.
+- `--rank`: low-rank spectral basis rank.
 
 Training outputs:
 
 ```text
-checkpoint/
+checkpoint/<dataset_name>/
 ├── para.yaml
 ├── output.txt
 ├── epoch_1.pth
 ├── epoch_2.pth
 └── ...
 
-result/train/
-└── <logname>_epoch_<epoch>.mat
+result/train/<dataset_name>/
+├── <train_no_ksp_logname>_console.log
+├── <train_no_ksp_logname>_epoch_1.mat
+├── <train_no_ksp_logname>_epoch_2.mat
+└── ...
+
+log/train/<dataset_name>/
+└── events.out.tfevents...
 ```
 
-TensorBoard logs are written to:
-
-```text
-logs_<logname>/
-```
+`train.py` clears a non-empty TensorBoard log directory before creating a new `SummaryWriter`.
 
 ## Testing
 
-Run:
+By default, `test.py` uses the accumulated/all 4D file whose name contains both `no_ksp` and `all`:
 
 ```bash
-python test.py --GPU 0
+python test.py \
+  --data_path dataset/dmi_si_hum32_no008_ra32 \
+  --model_name epoch_8.pth \
+  --GPU 0
 ```
 
-The test script loads parameters from `checkpoint/para.yaml` and applies all `.pth` checkpoints found in the checkpoint directory.
+This default all-file mode skips group averaging.
 
-Test outputs:
+To test a grouped `no_n2n_ksp` file and average the first two groups, pass the file name explicitly:
+
+```bash
+python test.py \
+  --data_path dataset/dmi_si_hum32_no008_ra32 \
+  --test_ksp_name dmi_si_no_ksp_hum32_no008_ra32_addno02.mat \
+  --model_name epoch_8.pth \
+  --GPU 0
+```
+
+Important arguments:
+
+- `--data_path`: dataset directory containing the `.mat` files.
+- `--test_ksp_name`: optional test `.mat` file name. If omitted, the script uses the accumulated/all `no_ksp` file when available.
+- `--checkpoint_path`: checkpoint root directory. The script reads from `checkpoint/<dataset_name>/`.
+- `--model_name`: checkpoint file to load. The `.pth` suffix is optional.
+- `--GPU`: GPU index used when CUDA is available.
+
+Testing outputs:
 
 ```text
-result/test/
-└── <logname>.mat
+result/test/<dataset_name>/
+└── <test_ksp_file_name_without_ext>.mat
+
+log/test/<dataset_name>/
+└── events.out.tfevents...
 ```
 
-TensorBoard logs are written to:
-
-```text
-test_logs_<logname>/
-```
+`test.py` clears a non-empty TensorBoard log directory before creating a new `SummaryWriter`. Because both all-file and group-file tests currently write TensorBoard events to `log/test/<dataset_name>/`, the later test run replaces the previous TensorBoard log. The saved `.mat` results are separated by test file name.
 
 ## Notes
 
-- Checkpoints are saved as PyTorch state dictionaries.
-- Reconstruction outputs are saved as MATLAB `.mat` files with the key `de`.
-- The test script uses the first two noisy k-space measurements and saves their averaged complex reconstruction.
-- Existing TensorBoard log directories with the same name may be cleared by the training script.
-
-## References
-
-1. Lehtinen J, Munkberg J, Hasselgren J, et al.  
-   **Noise2Noise: Learning image restoration without clean data**[J].  
-   *arXiv preprint arXiv:1803.04189*, 2018.
-
-2. Li X, Zhang G, Wu J, et al.  
-   **Reinforcing neuron extraction and spike inference in calcium imaging using deep self-supervised denoising**[J].  
-   *Nature Methods*, 2021, 18(11): 1395–1400.
+- Reconstruction outputs are MATLAB `.mat` files with the key `de`.
+- Checkpoints are PyTorch state dictionaries.
+- Training pairs are generated from the first dimension of the preprocessed `no_n2n_ksp`, so the number of grouped noisy measurements is not hard-coded.
+- `para.yaml` is saved with training hyperparameters and loaded by `test.py` before reconstruction. The dataset path used for grouping checkpoints/results still comes from `--data_path`.
