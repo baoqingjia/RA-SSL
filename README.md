@@ -1,6 +1,6 @@
 # RA-SSL
 
-This repository contains training and inference code for an RA-SSL reconstruction pipeline built around the spectral-spatial attention network `SSAN`. The code works with dynamic metabolic imaging k-space data stored in MATLAB/HDF5 `.mat` files.
+This repository contains training and inference code for an RA-SSL reconstruction pipeline built around the spectral-spatial attention network `SSAN`. The code works with dynamic metabolic imaging k-space data stored in MATLAB `.mat` files.
 
 ## Project Layout
 
