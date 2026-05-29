@@ -149,16 +149,6 @@ python test.py \
 
 This default all-file mode skips group averaging.
 
-To test a grouped `no_n2n_ksp` file and average the first two groups, pass the file name explicitly:
-
-```bash
-python test.py \
-  --data_path dataset/dmi_si_hum32_no008_ra32 \
-  --test_ksp_name dmi_si_no_ksp_hum32_no008_ra32_addno02.mat \
-  --model_name epoch_8.pth \
-  --GPU 0
-```
-
 Important arguments:
 
 - `--data_path`: dataset directory containing the `.mat` files.
