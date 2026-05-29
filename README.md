@@ -147,8 +147,6 @@ python test.py \
   --GPU 0
 ```
 
-This default all-file mode skips group averaging.
-
 Important arguments:
 
 - `--data_path`: dataset directory containing the `.mat` files.
@@ -167,13 +165,12 @@ log/test/<dataset_name>/
 └── events.out.tfevents...
 ```
 
-`test.py` clears a non-empty TensorBoard log directory before creating a new `SummaryWriter`. Because both all-file and group-file tests currently write TensorBoard events to `log/test/<dataset_name>/`, the later test run replaces the previous TensorBoard log. The saved `.mat` results are separated by test file name.
+`test.py` clears a non-empty TensorBoard log directory before creating a new `SummaryWriter`. The saved `.mat` results are separated by test file name.
 
 ## Notes
 
 - Reconstruction outputs are MATLAB `.mat` files with the key `de`.
 - Checkpoints are PyTorch state dictionaries.
-- Training pairs are generated from the first dimension of the preprocessed `no_n2n_ksp`, so the number of grouped noisy measurements is not hard-coded.
 - `para.yaml` is saved with training hyperparameters and loaded by `test.py` before reconstruction. The dataset path used for grouping checkpoints/results still comes from `--data_path`.
 
 ## References
