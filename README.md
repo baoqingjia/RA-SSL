@@ -54,10 +54,9 @@ Training expects:
 - An accumulated/all noisy k-space file whose name contains both `no_ksp` and `all`.
 - An optional reference file whose name contains `gt_ksp`.
 
-Testing supports two input modes:
+Testing input:
 
-- 4D accumulated/all mode: a file with key `no_ksp`, shape `(w, h, s, t)` after preprocessing. This mode does not average groups.
-- 5D grouped mode: a file with key `no_n2n_ksp`, shape `(group, t, w, h, s)` after preprocessing. This mode reconstructs the first two groups and averages them.
+- 4D accumulated/all mode: a file with key `no_ksp`, shape `(w, h, s, t)` after preprocessing.
 
 If `gt_ksp` exists, train/test compute RMSE and write GT images to TensorBoard. If it does not exist, RMSE and GT visualization are skipped.
 
