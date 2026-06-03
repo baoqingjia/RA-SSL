@@ -39,7 +39,7 @@ The dataset name, for example `dmi_si_hum32_no008_ra32`, is used automatically t
 
 ## Data Preparation
 
-Place `.mat` files under one dataset subdirectory. The grouped noisy k-space file `dmi_si_no_ksp_hum32_no008_ra32_addno02.mat` is not uploaded because it is large; please contact the authors by email if you need access to this file:
+Place all `.mat` files in a single dataset subdirectory. The grouped noisy k-space data file, `dmi_si_no_ksp_hum32_no008_ra32_addno02.mat`, can be downloaded from [Google Drive](https://drive.google.com/file/d/1Ualx3mnlsGP3NV8WjTke75nBUcATMhNY/view?usp=sharing).
 
 ```text
 dataset/dmi_si_hum32_no008_ra32/
